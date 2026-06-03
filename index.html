@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Kakao 지도 - 강원도 고등학교 전체보기 및 반경 동심원 표시</title>
+<style>
+/* 화면 전체를 지도로 가득 채우기 */
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
+#map { width: 100%; height: 100%; }
+
+/* 박스 배경과 테두리를 완전히 없애고 시·군 이름 글자만 선명하게 노출하는 스타일 */
+.region-label {
+	font-size: 12px;
+	font-weight: bold;
+	color: #D32F2F; 
+	text-shadow: -1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff, 1px 1px 0 #ffffff; 
+	white-space: nowrap;
+}
+
+/* 카카오 마커 대신 뿌려질 세련된 '작은 원 타입 마커' CSS */
+.circle-marker {
+width: 3px;
+height: 3px;
+background-color: #ff4500; 
+border: 2px solid #ffffff; 
+border-radius: 50%; 
+box-shadow: 0px 0px 4px rgba(0,0,0,0.4);
+}
+
+/* 학교 마커와 별개로 생성될 학교명 라벨의 테두리 없는 순수 텍스트 스타일 */
+.school-text-label {
+	font-size: 11px;
+	font-weight: bold;
+	color: #333333;
+	text-shadow: -1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff, 1px 1px 0 #ffffff;
+	white-space: nowrap;
+	display: none; 
+}
+
+/* [추가] 동심원 양옆에 표시될 거리 라벨 스타일 */
+.distance-label {
+	font-size: 11px;
+	font-weight: bold;
+	color: #FF0000; /* 빨간색 글씨 */
+	text-shadow: -1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff, 1px 1px 0 #ffffff;
+	white-space: nowrap;
+}
+</style>
+</head>
+<body>
+<div id="map"></div>
+	
+<script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=54999fb4f087c2d94b522ed706b8576e&libraries=services"></script>
+<script>
+var container = document.getElementById('map');
+var options = {
+	center: new kakao.maps.LatLng(37.8285, 128.1500), 
+	level: 11 
+};
+var map = new kakao.maps.Map(container, options);
+
+// 카카오 지도의 기본 더블클릭 확대 기능을 끕니다 (동심원 클릭 편의용)
+map.setZoomable(true); 
+container.addEventListener('dblclick', function(e) {
+	e.preventDefault();
+}, true);
+
+var schoolMarkerElements = [];
+var schoolNameElements = [];
+
+// 1. 같은 폴더 내의 schools.json 파일 연동 및 안전한 마커 표출
+fetch('schools.json')
+	.then(function(response) {
+		if (!response.ok) throw new Error('학교 데이터 파일을 찾을 수 없습니다.');
+		return response.json();
+	})
+	.then(function(schoolsData) {
+		var anchors = [
+			{ x: 0.5,  y: 1.4 },  
+			{ x: 0.5,  y: -0.4 }, 
+			{ x: 1.1,  y: 0.5 },  
+			{ x: -0.1, y: 0.5 }   
+		];
+
+		schoolsData.forEach(function(school, index) {
+			var latlng = new kakao.maps.LatLng(school.lat, school.lng);
+
+			var markerContent = document.createElement('div');
+			markerContent.className = 'circle-marker';
+			markerContent.style.width = '3px';
+			markerContent.style.height = '3px';
+			schoolMarkerElements.push(markerContent);
+
+			new kakao.maps.CustomOverlay({
+				position: latlng,
+				content: markerContent,
+				xAnchor: 0.5, 
+				yAnchor: 0.5 
+			}).setMap(map);
+
+			var anchorIndex = 0; 
+			for (var i = 0; i < index; i++) {
+				var prev = schoolsData[i];
+				var latDiff = Math.abs(school.lat - prev.lat);
+				var lngDiff = Math.abs(school.lng - prev.lng);
+				
+				if (latDiff < 0.015 && lngDiff < 0.015) {
+					anchorIndex = (anchorIndex + 1) % anchors.length; 
+				}
+			}
+			var chosenAnchor = anchors[anchorIndex];
+
+			var nameElem = document.createElement('div');
+			nameElem.className = 'school-text-label';
+			nameElem.innerText = school.name;
+			schoolNameElements.push(nameElem);
+
+			new kakao.maps.CustomOverlay({
+				position: latlng,
+				content: nameElem,
+				xAnchor: chosenAnchor.x, 
+				yAnchor: chosenAnchor.y
+			}).setMap(map);
+		});
+		
+		kakao.maps.event.trigger(map, 'zoom_changed');
+	})
+	.catch(function(error) {
+		console.error('학교 데이터 로드 에러:', error);
+	});
+
+/* ================= 여기서부터 동적 크기 가변 제어 코드입니다 ================= */
+var isPoiHidden = false;
+
+kakao.maps.event.addListener(map, 'zoom_changed', function() {
+	var currentLevel = map.getLevel(); 
+	var newSize = 3; 
+
+	if (currentLevel === 1) { newSize = 20; } 
+	else if (currentLevel === 2) { newSize = 18; } 
+	else if (currentLevel === 3) { newSize = 16; } 
+	else if (currentLevel === 4) { newSize = 14; } 
+	else if (currentLevel === 5) { newSize = 12; } 
+	else if (currentLevel === 6) { newSize = 11; } 
+	else if (currentLevel === 7) { newSize = 9; } 
+	else if (currentLevel === 8) { newSize = 8; } 
+	else if (currentLevel === 9) { newSize = 7; } 
+	else if (currentLevel === 10) { newSize = 6; } 
+	else if (currentLevel === 11) { newSize = 5; } 
+	else if (currentLevel === 12) { newSize = 4; } 
+	else if (currentLevel === 13) { newSize = 3.5; } 
+	else { newSize = 3; }
+
+	schoolMarkerElements.forEach(function(markerElem) {
+		markerElem.style.width = newSize + 'px';
+		markerElem.style.height = newSize + 'px';
+	});
+
+	var nameDisplay = (currentLevel <= 8) ? 'block' : 'none';
+	schoolNameElements.forEach(function(nameElem) {
+		nameElem.style.display = nameDisplay;
+	});
+
+	if (currentLevel <= 5) {
+		if (!isPoiHidden) {
+			map.addOverlayMapTypeId(kakao.maps.MapTypeId.TERRAIN);
+			isPoiHidden = true;
+		}
+	} else {
+		if (isPoiHidden) {
+			map.removeOverlayMapTypeId(kakao.maps.MapTypeId.TERRAIN);
+			isPoiHidden = false;
+		}
+	}
+});
+/* ========================================================================= */
+
+
+/* ================= 여기서부터 더블클릭 마커, 진한 동심원, 양끝 거리 라벨, ESC 초기화 기능입니다 ================= */
+var clickMarker = null;   // 클릭된 위치의 마커 객체
+var clickCircles = [];    // 생성된 동심원들을 담을 배열
+var distanceLabels = [];  // 생성된 거리 글자 라벨들을 담을 배열
+
+// 각 거리별 설정 (반지름 미터값, 텍스트 표기용 문자열, 색상)
+var circleOptions = [
+	{ radius: 1000,  text: '1km',  color: '#FF0000' }, 
+	{ radius: 2500,  text: '2.5km', color: '#FF7F00' }, 
+	{ radius: 5000,  text: '5km',   color: '#EEEE00' }, 
+	{ radius: 10000, text: '10km',  color: '#00FF00' }, 
+	{ radius: 15000, text: '15km',  color: '#0000FF' }, 
+	{ radius: 20000, text: '20km',  color: '#8B00FF' }  
+];
+
+// 화면에 있는 동심원 관련 요소들을 전부 삭제하여 초기화하는 함수
+function clearCircleOverlays() {
+	if (clickMarker) {
+		clickMarker.setMap(null);
+		clickMarker = null;
+	}
+	clickCircles.forEach(function(circle) {
+		circle.setMap(null);
+	});
+	clickCircles = [];
+	
+	distanceLabels.forEach(function(label) {
+		label.setMap(null);
+	});
+	distanceLabels = [];
+}
+
+// 위도/경도 기반 좌표축 이동 계산 함수 (동심원 양옆 끝 좌표 계산용)
+function getOffsetLatLng(baseLatLng, rMeter, angleDegree) {
+	var earthRadius = 6378137; // 지구 반지름 (m)
+	var dLat = (rMeter * Math.cos(Math.PI * angleDegree / 180)) / earthRadius;
+	var dLng = (rMeter * Math.sin(Math.PI * angleDegree / 180)) / (earthRadius * Math.cos(Math.PI * baseLatLng.getLat() / 180));
+	
+	var resLat = baseLatLng.getLat() + (dLat * 180 / Math.PI);
+	var resLng = baseLatLng.getLng() + (dLng * 180 / Math.PI);
+	return new kakao.maps.LatLng(resLat, resLng);
+}
+
+// 지도 더블클릭 이벤트
+kakao.maps.event.addListener(map, 'dblclick', function(mouseEvent) {
+	var clickedPosition = mouseEvent.latLng;
+
+	// 기존 요소 지우기
+	clearCircleOverlays();
+
+	// 새로운 중심 마커 생성
+	clickMarker = new kakao.maps.Marker({
+		position: clickedPosition
+	});
+	clickMarker.setMap(map);
+
+	// 동심원 및 양옆 거리 라벨 생성
+	circleOptions.forEach(function(opt) {
+		// 1. 동심원선 그리기 (fillOpacity를 0.15로 높여 색상을 약간 더 진하게 변경)
+		var circle = new kakao.maps.Circle({
+			center : clickedPosition,       
+			radius: opt.radius,             
+			strokeWeight: 2,                
+			strokeColor: opt.color,         
+			strokeOpacity: 0.8,             
+			strokeStyle: 'dashed',          
+			fillColor: opt.color,           
+			fillOpacity: 0.15               
+		});
+		circle.setMap(map);
+		clickCircles.push(circle);
+
+		// 2. 동심원 기준 우측 끝 좌표와 좌측 끝 좌표 계산 (90도 = 우측, 270도 = 좌측)
+		var rightPosition = getOffsetLatLng(clickedPosition, opt.radius, 90);
+		var leftPosition = getOffsetLatLng(clickedPosition, opt.radius, 270);
+
+		// 우측 글씨 라벨 생성
+		var rightLabel = new kakao.maps.CustomOverlay({
+			position: rightPosition,
+			content: '<div class="distance-label">' + opt.text + '</div>',
+			xAnchor: 0.0, // 원 바깥쪽으로 글씨가 이어지도록 앵커 조절
+			yAnchor: 0.5
+		});
+		rightLabel.setMap(map);
+		distanceLabels.push(rightLabel);
+
+		// 좌측 글씨 라벨 생성
+		var leftLabel = new kakao.maps.CustomOverlay({
+			position: leftPosition,
+			content: '<div class="distance-label">' + opt.text + '</div>',
+			xAnchor: 1.0, // 원 바깥쪽으로 글씨가 이어지도록 앵커 조절
+			yAnchor: 0.5
+		});
+		leftLabel.setMap(map);
+		distanceLabels.push(leftLabel);
+	});
+});
+
+// [추가] 키보드 Esc 누를 때 동심원 및 마커 초기화 이벤트 리스너
+window.addEventListener('keydown', function(event) {
+	if (event.key === 'Escape' || event.keyCode === 27) {
+		clearCircleOverlays();
+	}
+});
+/* ========================================================================= */
+
+
+// 2. 외부 GeoJSON 수집 파싱 및 시군 중심좌표 동적 매핑 연동
+fetch('https://raw.githubusercontent.com/southkorea/southkorea-maps/master/kostat/2013/json/skorea_municipalities_geo_simple.json')
+.then(response => response.json())
+.then(geojson => {
+	var features = geojson.features;
+	features.forEach(feature => {
+		if(feature.properties.code.startsWith('32')) {
+			var geometry = feature.geometry;
+			var regionName = feature.properties.name;
+
+			var latSum = 0, lngSum = 0, coordCount = 0;
+
+			if (geometry.type === 'Polygon') {
+				geometry.coordinates.forEach(function(coordinateRing) {
+					drawPreciseLine(coordinateRing);
+					coordinateRing.forEach(function(coord) {
+						lngSum += coord[0]; 
+						latSum += coord[1]; 
+						coordCount++;
+					});
+				});
+			} else if (geometry.type === 'MultiPolygon') {
+				geometry.coordinates.forEach(function(polygonComponent) {
+					polygonComponent.forEach(function(coordinateRing) {
+						drawPreciseLine(coordinateRing);
+						coordinateRing.forEach(function(coord) {
+							lngSum += coord[0]; 
+							latSum += coord[1]; 
+							coordCount++;
+						});
+					});
+				});
+			}
+
+			if (coordCount > 0) {
+				var centerLat = latSum / coordCount;
+				var centerLng = lngSum / coordCount;
+
+				if (regionName === '강릉시') { centerLat -= 0.04; centerLng -= 0.04; }
+				if (regionName === '홍천군') { centerLng -= 0.07; }
+				if (regionName === '삼척시') { centerLat -= 0.05; }
+
+				new kakao.maps.CustomOverlay({
+					position: new kakao.maps.LatLng(centerLat, centerLng),
+					content: '<div class="region-label">' + regionName + '</div>',
+					xAnchor: 0.5,
+					yAnchor: 0.5
+				}).setMap(map);
+			}
+		}
+	});
+})
+.catch(error => console.error('정밀 경계 로드 오류:', error));
+
+function drawPreciseLine(coordinateRing) {
+	var path = [];
+	coordinateRing.forEach(function(coord) {
+		path.push(new kakao.maps.LatLng(coord[1], coord[0]));
+	});
+
+	var polygon = new kakao.maps.Polygon({
+		path: path,
+		strokeWeight: 1,         
+		strokeColor: '#FF0000',    
+		strokeOpacity: 1.0,      
+		strokeStyle: 'solid',    
+		fillColor: '#FF0000',      
+		fillOpacity: 0.02         
+	});
+
+	polygon.setMap(map);
+}
+</script>
+</body>
+</html>
