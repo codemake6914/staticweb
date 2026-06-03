@@ -134,32 +134,42 @@ var isPoiHidden = false;
 
 kakao.maps.event.addListener(map, 'zoom_changed', function() {
 	var currentLevel = map.getLevel(); 
-	var newSize = 3; 
+	var newSize = 1; 
 
-	if (currentLevel === 1) { newSize = 20; } 
-	else if (currentLevel === 2) { newSize = 18; } 
-	else if (currentLevel === 3) { newSize = 16; } 
-	else if (currentLevel === 4) { newSize = 14; } 
-	else if (currentLevel === 5) { newSize = 12; } 
-	else if (currentLevel === 6) { newSize = 11; } 
-	else if (currentLevel === 7) { newSize = 9; } 
-	else if (currentLevel === 8) { newSize = 8; } 
-	else if (currentLevel === 9) { newSize = 7; } 
-	else if (currentLevel === 10) { newSize = 6; } 
-	else if (currentLevel === 11) { newSize = 5; } 
-	else if (currentLevel === 12) { newSize = 4; } 
-	else if (currentLevel === 13) { newSize = 3.5; } 
-	else { newSize = 3; }
+	if (currentLevel === 1) { newSize = 16; } 
+	else if (currentLevel === 2) { newSize = 14; } 
+	else if (currentLevel === 3) { newSize = 12; } 
+	else if (currentLevel === 4) { newSize = 11; } 
+	else if (currentLevel === 5) { newSize = 9; } 
+	else if (currentLevel === 6) { newSize = 8; } 
+	else if (currentLevel === 7) { newSize = 7; } 
+	else if (currentLevel === 8) { newSize = 6; } 
+	else if (currentLevel === 9) { newSize = 5; } 
+	else if (currentLevel === 10) { newSize = 4; } 
+	else if (currentLevel === 11) { newSize = 3; } 
+	else if (currentLevel === 12) { newSize = 2; } 
+	else if (currentLevel === 13) { newSize = 1.5; } 
+	else { newSize = 1; }
 
 	schoolMarkerElements.forEach(function(markerElem) {
 		markerElem.style.width = newSize + 'px';
 		markerElem.style.height = newSize + 'px';
 	});
 
-	var nameDisplay = (currentLevel <= 8) ? 'block' : 'none';
-	schoolNameElements.forEach(function(nameElem) {
-		nameElem.style.display = nameDisplay;
-	});
+var nameDisplay = (currentLevel <= 9) ? 'block' : 'none';
+
+schoolNameElements.forEach(function(nameElem) {
+    nameElem.style.display = nameDisplay;
+    
+    // 요소가 표시될 때(block)만 5px 여백을 적용하고, 숨겨질 때는 여백을 지웁니다.
+    if (nameDisplay === 'block') {
+        nameElem.style.marginRight = '5px'; // 오른쪽으로 5px 띄우기
+        // 만약 아래로 5px을 띄우고 싶다면 아래 코드를 사용하세요.
+        // nameElem.style.marginBottom = '5px'; 
+    } else {
+        nameElem.style.marginRight = ''; // 숨겨질 때는 여백 초기화
+    }
+});
 
 	if (currentLevel <= 5) {
 		if (!isPoiHidden) {
