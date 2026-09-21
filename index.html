@@ -214,35 +214,46 @@ function displayCCTVMarkers() {
 		    cctv.lng >= lngMin && cctv.lng <= lngMax) {
 			
 			var latlng = new kakao.maps.LatLng(cctv.lat, cctv.lng);
+			
+			// 마커와 텍스트를 담을 컨테이너 생성
+			var container = document.createElement('div');
+			container.style.display = 'flex';
+			container.style.alignItems = 'center';
+			container.style.gap = '3px';
+			container.style.pointerEvents = 'none';
+			
+			// 마커 생성
 			var markerContent = document.createElement('div');
 			markerContent.className = 'cctv-marker';
 			markerContent.style.width = newSize + 'px';
 			markerContent.style.height = newSize + 'px';
+			markerContent.style.flexShrink = '0';
 			cctvMarkerElements.push(markerContent);
-
-			var overlay = new kakao.maps.CustomOverlay({
-				position: latlng,
-				content: markerContent,
-				xAnchor: 0.5,
-				yAnchor: 0.5
-			});
-			overlay.setMap(map);
-			displayedCCTVOverlays.push(overlay);
-
-			// CCTV 이름 라벨 추가
+			
+			// 텍스트 라벨 생성
 			var nameElem = document.createElement('div');
 			nameElem.className = 'cctv-text-label';
 			nameElem.innerText = cctv.name;
+			nameElem.style.fontSize = '10px';
+			nameElem.style.fontWeight = 'bold';
+			nameElem.style.color = '#00CC00';
+			nameElem.style.textShadow = '-1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff, 1px 1px 0 #ffffff';
+			nameElem.style.whiteSpace = 'nowrap';
+			nameElem.style.pointerEvents = 'none';
+			
+			// 컨테이너에 추가
+			container.appendChild(markerContent);
+			container.appendChild(nameElem);
 
-			var nameOverlay = new kakao.maps.CustomOverlay({
+			var overlay = new kakao.maps.CustomOverlay({
 				position: latlng,
-				content: nameElem,
-				xAnchor: 0.0,
-				yAnchor: 0.5
+				content: container,
+				xAnchor: 0.5,
+				yAnchor: 0.5,
+				clickable: false
 			});
-			nameOverlay.setMap(map);
-			displayedCCTVOverlays.push(nameOverlay);
-
+			overlay.setMap(map);
+			displayedCCTVOverlays.push(overlay);
 			displayedCount++;
 		}
 	}
