@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8"/>
-<title>Kakao 지도 - 강원도 고등학교 전체보기 및 반경 동심원 표시</title>
+<title>Kakao 지도 - 강원도 CCTV 및 학교 지도</title>
 <style>
 /* 화면 전체를 지도로 가득 채우기 */
 html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
@@ -17,28 +17,17 @@ html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
 	white-space: nowrap;
 }
 
-/* 카카오 마커 대신 뿌려질 세련된 '작은 원 타입 마커' CSS */
+/* 학교 마커 - 빨간색 원 */
 .circle-marker {
-width: 3px;
-height: 3px;
-background-color: #ff4500; 
-border: 2px solid #ffffff; 
-border-radius: 50%; 
-box-shadow: 0px 0px 4px rgba(0,0,0,0.4);
+	width: 3px;
+	height: 3px;
+	background-color: #ff4500; 
+	border: 2px solid #ffffff; 
+	border-radius: 50%; 
+	box-shadow: 0px 0px 4px rgba(0,0,0,0.4);
 }
 
-/* CCTV 마커 - 녹색 사각형 */
-.cctv-marker {
-width: 5px;
-height: 5px;
-background-color: #00CC00;  /* 녹색 */
-border: 2px solid #FFFFFF;
-border-radius: 0px;  /* 사각형 */
-box-shadow: 0px 0px 4px rgba(0,0,0,0.4);
-box-sizing: border-box;
-}
-
-/* 학교 마커와 별개로 생성될 학교명 라벨의 테두리 없는 순수 텍스트 스타일 */
+/* 학교명 라벨 */
 .school-text-label {
 	font-size: 11px;
 	font-weight: bold;
@@ -48,11 +37,21 @@ box-sizing: border-box;
 	display: none; 
 }
 
-/* [추가] 동심원 양옆에 표시될 거리 라벨 스타일 */
+/* CCTV 마커 - 녹색 사각형 */
+.cctv-marker {
+	width: 5px;
+	height: 5px;
+	background-color: #00CC00;
+	border: 1px solid #FFFFFF;
+	box-sizing: border-box;
+	box-shadow: 0px 0px 3px rgba(0,0,0,0.3);
+}
+
+/* 거리 라벨 */
 .distance-label {
 	font-size: 11px;
 	font-weight: bold;
-	color: #FF0000; /* 빨간색 글씨 */
+	color: #FF0000;
 	text-shadow: -1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff, 1px 1px 0 #ffffff;
 	white-space: nowrap;
 }
@@ -70,7 +69,6 @@ var options = {
 };
 var map = new kakao.maps.Map(container, options);
 
-// 카카오 지도의 기본 더블클릭 확대 기능을 끕니다 (동심원 클릭 편의용)
 map.setZoomable(true); 
 container.addEventListener('dblclick', function(e) {
 	e.preventDefault();
@@ -78,11 +76,11 @@ container.addEventListener('dblclick', function(e) {
 
 var schoolMarkerElements = [];
 var schoolNameElements = [];
+var cctvData = [];
+var displayedCCTVOverlays = [];
 var cctvMarkerElements = [];
-var cctvData = [];  // 전체 CCTV 데이터 저장
-var displayedCCTVOverlays = [];  // 현재 표시되고 있는 CCTV 마커 객체들
 
-// 1. 같은 폴더 내의 schools.json 파일 연동 및 안전한 마커 표출
+// 학교 데이터 로드
 fetch('schools.json')
 	.then(function(response) {
 		if (!response.ok) throw new Error('학교 데이터 파일을 찾을 수 없습니다.');
@@ -137,30 +135,93 @@ fetch('schools.json')
 			}).setMap(map);
 		});
 		
-		kakao.maps.event.trigger(map, 'zoom_changed');
+		console.log('학교 데이터 로드 완료:', schoolsData.length);
 	})
 	.catch(function(error) {
 		console.error('학교 데이터 로드 에러:', error);
 	});
 
-// CCTV 데이터 로드 (마커는 줌 레벨에 따라 동적으로 표시)
+// CCTV 데이터 로드
 fetch('cctv.json')
 	.then(function(response) {
 		if (!response.ok) throw new Error('CCTV 데이터 파일을 찾을 수 없습니다.');
 		return response.json();
 	})
 	.then(function(data) {
-		cctvData = data;  // 전체 데이터 저장
-		console.log('CCTV 데이터 로드 성공, 총 개수:', cctvData.length);
-		kakao.maps.event.trigger(map, 'zoom_changed');
+		cctvData = data;
+		console.log('CCTV 데이터 로드 완료:', cctvData.length);
 	})
 	.catch(function(error) {
 		console.error('CCTV 데이터 로드 에러:', error);
 	});
 
-/* ================= 여기서부터 동적 크기 가변 제어 코드입니다 ================= */
+// CCTV 마커 표시/갱신 함수
+function displayCCTVMarkers() {
+	var currentLevel = map.getLevel();
+	
+	// 기존 CCTV 마커 제거
+	displayedCCTVOverlays.forEach(function(overlay) {
+		overlay.setMap(null);
+	});
+	displayedCCTVOverlays = [];
+	cctvMarkerElements = [];
+
+	// currentLevel > 5일 때는 표시 안 함
+	if (currentLevel > 5 || cctvData.length === 0) {
+		return;
+	}
+
+	// 현재 지도 중심
+	var center = map.getCenter();
+	var centerLat = center.getLat();
+	var centerLng = center.getLng();
+	
+	var latMin = centerLat - 0.2;
+	var latMax = centerLat + 0.2;
+	var lngMin = centerLng - 0.2;
+	var lngMax = centerLng + 0.2;
+
+	var displayedCount = 0;
+	var newSize = 5;
+
+	// 줌 레벨에 따른 크기 설정
+	if (currentLevel === 1) { newSize = 16; } 
+	else if (currentLevel === 2) { newSize = 14; } 
+	else if (currentLevel === 3) { newSize = 12; } 
+	else if (currentLevel === 4) { newSize = 11; } 
+	else if (currentLevel === 5) { newSize = 9; }
+
+	// 범위 내의 CCTV만 표시
+	for (var i = 0; i < cctvData.length; i++) {
+		var cctv = cctvData[i];
+		if (cctv.lat >= latMin && cctv.lat <= latMax && 
+		    cctv.lng >= lngMin && cctv.lng <= lngMax) {
+			
+			var latlng = new kakao.maps.LatLng(cctv.lat, cctv.lng);
+			var markerContent = document.createElement('div');
+			markerContent.className = 'cctv-marker';
+			markerContent.style.width = newSize + 'px';
+			markerContent.style.height = newSize + 'px';
+			cctvMarkerElements.push(markerContent);
+
+			var overlay = new kakao.maps.CustomOverlay({
+				position: latlng,
+				content: markerContent,
+				xAnchor: 0.5,
+				yAnchor: 0.5
+			});
+			overlay.setMap(map);
+			displayedCCTVOverlays.push(overlay);
+			displayedCount++;
+		}
+	}
+
+	console.log('표시된 CCTV 개수:', displayedCount);
+}
+
 var isPoiHidden = false;
 
+// 줌/드래그 이벤트
 kakao.maps.event.addListener(map, 'zoom_changed', function() {
 	var currentLevel = map.getLevel(); 
 	var newSize = 1; 
@@ -185,107 +246,28 @@ kakao.maps.event.addListener(map, 'zoom_changed', function() {
 		markerElem.style.height = newSize + 'px';
 	});
 
-	cctvMarkerElements.forEach(function(markerElem) {
-		markerElem.style.width = newSize + 'px';
-		markerElem.style.height = newSize + 'px';
+	var nameDisplay = (currentLevel <= 9) ? 'block' : 'none';
+
+	schoolNameElements.forEach(function(nameElem) {
+	    nameElem.style.display = nameDisplay;
+	    if (nameDisplay === 'block') {
+	        nameElem.style.marginRight = '5px';
+	    } else {
+	        nameElem.style.marginRight = '';
+	    }
 	});
-
-// CCTV 마커를 화면 중앙 기준으로 범위 내에서만 표시
-function displayCCTVMarkers() {
-	var currentLevel = map.getLevel();
-	
-	// 기존 CCTV 마커 모두 제거
-	displayedCCTVOverlays.forEach(function(overlay) {
-		overlay.setMap(null);
-	});
-	displayedCCTVOverlays = [];
-	cctvMarkerElements = [];
-
-	// currentLevel <= 5일 때만 표시
-	if (currentLevel > 5 || cctvData.length === 0) {
-		return;
-	}
-
-	// 화면 중심 좌표 얻기
-	var center = map.getCenter();
-	var centerLat = center.getLat();
-	var centerLng = center.getLng();
-	
-	var latMin = centerLat - 0.2;
-	var latMax = centerLat + 0.2;
-	var lngMin = centerLng - 0.2;
-	var lngMax = centerLng + 0.2;
-
-	console.log('CCTV 마커 표시 범위: Lat(' + latMin.toFixed(4) + '~' + latMax.toFixed(4) + '), Lng(' + lngMin.toFixed(4) + '~' + lngMax.toFixed(4) + ')');
-
-	var displayedCount = 0;
-
-	// 범위 내의 CCTV만 마커로 표시
-	cctvData.forEach(function(cctv) {
-		if (cctv.lat >= latMin && cctv.lat <= latMax && 
-		    cctv.lng >= lngMin && cctv.lng <= lngMax) {
-			
-			var latlng = new kakao.maps.LatLng(cctv.lat, cctv.lng);
-
-			var markerContent = document.createElement('div');
-			markerContent.className = 'cctv-marker';
-			
-			// 현재 줌 레벨에 맞는 크기 적용
-			var newSize = 3;
-			if (currentLevel === 1) { newSize = 16; } 
-			else if (currentLevel === 2) { newSize = 14; } 
-			else if (currentLevel === 3) { newSize = 12; } 
-			else if (currentLevel === 4) { newSize = 11; } 
-			else if (currentLevel === 5) { newSize = 9; }
-			
-			markerContent.style.width = newSize + 'px';
-			markerContent.style.height = newSize + 'px';
-			cctvMarkerElements.push(markerContent);
-
-			var overlay = new kakao.maps.CustomOverlay({
-				position: latlng,
-				content: markerContent,
-				xAnchor: 0.5,
-				yAnchor: 0.5
-			});
-			overlay.setMap(map);
-			displayedCCTVOverlays.push(overlay);
-			displayedCount++;
-		}
-	});
-
-	console.log('표시된 CCTV 개수:', displayedCount);
-}
-
-var nameDisplay = (currentLevel <= 9) ? 'block' : 'none';
-
-schoolNameElements.forEach(function(nameElem) {
-    nameElem.style.display = nameDisplay;
-    
-    // 요소가 표시될 때(block)만 5px 여백을 적용하고, 숨겨질 때는 여백을 지웁니다.
-    if (nameDisplay === 'block') {
-        nameElem.style.marginRight = '5px'; // 오른쪽으로 5px 띄우기
-        // 만약 아래로 5px을 띄우고 싶다면 아래 코드를 사용하세요.
-        // nameElem.style.marginBottom = '5px'; 
-    } else {
-        nameElem.style.marginRight = ''; // 숨겨질 때는 여백 초기화
-    }
-});
 
 	if (currentLevel <= 5) {
 		if (!isPoiHidden) {
 			map.addOverlayMapTypeId(kakao.maps.MapTypeId.TERRAIN);
 			isPoiHidden = true;
-			displayCCTVMarkers();  // CCTV 마커 표시
-		} else {
-			displayCCTVMarkers();  // 줌 변경 시에도 범위 업데이트
 		}
+		displayCCTVMarkers();
 	} else {
 		if (isPoiHidden) {
 			map.removeOverlayMapTypeId(kakao.maps.MapTypeId.TERRAIN);
 			isPoiHidden = false;
 		}
-		// currentLevel > 5일 때는 CCTV 마커 제거
 		displayedCCTVOverlays.forEach(function(overlay) {
 			overlay.setMap(null);
 		});
@@ -293,15 +275,19 @@ schoolNameElements.forEach(function(nameElem) {
 		cctvMarkerElements = [];
 	}
 });
-/* ========================================================================= */
 
+// 드래그 완료 시 CCTV 마커 업데이트
+kakao.maps.event.addListener(map, 'dragend', function() {
+	if (map.getLevel() <= 5) {
+		displayCCTVMarkers();
+	}
+});
 
-/* ================= 여기서부터 더블클릭 마커, 진한 동심원, 양끝 거리 라벨, ESC 초기화 기능입니다 ================= */
-var clickMarker = null;   // 클릭된 위치의 마커 객체
-var clickCircles = [];    // 생성된 동심원들을 담을 배열
-var distanceLabels = [];  // 생성된 거리 글자 라벨들을 담을 배열
+/* ================= 동심원 기능 ================= */
+var clickMarker = null;
+var clickCircles = [];
+var distanceLabels = [];
 
-// 각 거리별 설정 (반지름 미터값, 텍스트 표기용 문자열, 색상)
 var circleOptions = [
 	{ radius: 1000,  text: '1km',  color: '#FF0000' }, 
 	{ radius: 2500,  text: '2.5km', color: '#FF7F00' }, 
@@ -311,7 +297,6 @@ var circleOptions = [
 	{ radius: 20000, text: '20km',  color: '#8B00FF' }  
 ];
 
-// 화면에 있는 동심원 관련 요소들을 전부 삭제하여 초기화하는 함수
 function clearCircleOverlays() {
 	if (clickMarker) {
 		clickMarker.setMap(null);
@@ -328,9 +313,8 @@ function clearCircleOverlays() {
 	distanceLabels = [];
 }
 
-// 위도/경도 기반 좌표축 이동 계산 함수 (동심원 양옆 끝 좌표 계산용)
 function getOffsetLatLng(baseLatLng, rMeter, angleDegree) {
-	var earthRadius = 6378137; // 지구 반지름 (m)
+	var earthRadius = 6378137;
 	var dLat = (rMeter * Math.cos(Math.PI * angleDegree / 180)) / earthRadius;
 	var dLng = (rMeter * Math.sin(Math.PI * angleDegree / 180)) / (earthRadius * Math.cos(Math.PI * baseLatLng.getLat() / 180));
 	
@@ -339,22 +323,17 @@ function getOffsetLatLng(baseLatLng, rMeter, angleDegree) {
 	return new kakao.maps.LatLng(resLat, resLng);
 }
 
-// 지도 더블클릭 이벤트
 kakao.maps.event.addListener(map, 'dblclick', function(mouseEvent) {
 	var clickedPosition = mouseEvent.latLng;
 
-	// 기존 요소 지우기
 	clearCircleOverlays();
 
-	// 새로운 중심 마커 생성
 	clickMarker = new kakao.maps.Marker({
 		position: clickedPosition
 	});
 	clickMarker.setMap(map);
 
-	// 동심원 및 양옆 거리 라벨 생성
 	circleOptions.forEach(function(opt) {
-		// 1. 동심원선 그리기 (fillOpacity를 0.15로 높여 색상을 약간 더 진하게 변경)
 		var circle = new kakao.maps.Circle({
 			center : clickedPosition,       
 			radius: opt.radius,             
@@ -368,25 +347,22 @@ kakao.maps.event.addListener(map, 'dblclick', function(mouseEvent) {
 		circle.setMap(map);
 		clickCircles.push(circle);
 
-		// 2. 동심원 기준 우측 끝 좌표와 좌측 끝 좌표 계산 (90도 = 우측, 270도 = 좌측)
 		var rightPosition = getOffsetLatLng(clickedPosition, opt.radius, 90);
 		var leftPosition = getOffsetLatLng(clickedPosition, opt.radius, 270);
 
-		// 우측 글씨 라벨 생성
 		var rightLabel = new kakao.maps.CustomOverlay({
 			position: rightPosition,
 			content: '<div class="distance-label">' + opt.text + '</div>',
-			xAnchor: 0.0, // 원 바깥쪽으로 글씨가 이어지도록 앵커 조절
+			xAnchor: 0.0,
 			yAnchor: 0.5
 		});
 		rightLabel.setMap(map);
 		distanceLabels.push(rightLabel);
 
-		// 좌측 글씨 라벨 생성
 		var leftLabel = new kakao.maps.CustomOverlay({
 			position: leftPosition,
 			content: '<div class="distance-label">' + opt.text + '</div>',
-			xAnchor: 1.0, // 원 바깥쪽으로 글씨가 이어지도록 앵커 조절
+			xAnchor: 1.0,
 			yAnchor: 0.5
 		});
 		leftLabel.setMap(map);
@@ -394,23 +370,13 @@ kakao.maps.event.addListener(map, 'dblclick', function(mouseEvent) {
 	});
 });
 
-// [추가] 키보드 Esc 누를 때 동심원 및 마커 초기화 이벤트 리스너
 window.addEventListener('keydown', function(event) {
 	if (event.key === 'Escape' || event.keyCode === 27) {
 		clearCircleOverlays();
 	}
 });
 
-// 지도 드래그 완료 시 CCTV 마커 범위 업데이트
-kakao.maps.event.addListener(map, 'dragend', function() {
-	if (map.getLevel() <= 5) {
-		displayCCTVMarkers();
-	}
-});
-/* ========================================================================= */
-
-
-// 2. 외부 GeoJSON 수집 파싱 및 시군 중심좌표 동적 매핑 연동
+/* ================= 경계선 표시 ================= */
 fetch('skorea_municipalities_geo_simple.json')
 .then(response => response.json())
 .then(geojson => {
