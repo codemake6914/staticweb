@@ -79,6 +79,8 @@ container.addEventListener('dblclick', function(e) {
 var schoolMarkerElements = [];
 var schoolNameElements = [];
 var cctvMarkerElements = [];
+var cctvData = [];  // 전체 CCTV 데이터 저장
+var displayedCCTVOverlays = [];  // 현재 표시되고 있는 CCTV 마커 객체들
 
 // 1. 같은 폴더 내의 schools.json 파일 연동 및 안전한 마커 표출
 fetch('schools.json')
@@ -141,31 +143,15 @@ fetch('schools.json')
 		console.error('학교 데이터 로드 에러:', error);
 	});
 
-// CCTV 데이터 로드 및 마커 표출
+// CCTV 데이터 로드 (마커는 줌 레벨에 따라 동적으로 표시)
 fetch('cctv.json')
 	.then(function(response) {
 		if (!response.ok) throw new Error('CCTV 데이터 파일을 찾을 수 없습니다.');
 		return response.json();
 	})
-	.then(function(cctvData) {
-		console.log('CCTV 데이터 로드 성공, 개수:', cctvData.length);
-		cctvData.forEach(function(cctv) {
-			var latlng = new kakao.maps.LatLng(cctv.lat, cctv.lng);
-
-			var markerContent = document.createElement('div');
-			markerContent.className = 'cctv-marker';
-			markerContent.style.width = '5px';
-			markerContent.style.height = '5px';
-			cctvMarkerElements.push(markerContent);
-
-			new kakao.maps.CustomOverlay({
-				position: latlng,
-				content: markerContent,
-				xAnchor: 0.5,
-				yAnchor: 0.5
-			}).setMap(map);
-		});
-
+	.then(function(data) {
+		cctvData = data;  // 전체 데이터 저장
+		console.log('CCTV 데이터 로드 성공, 총 개수:', cctvData.length);
 		kakao.maps.event.trigger(map, 'zoom_changed');
 	})
 	.catch(function(error) {
@@ -204,6 +190,73 @@ kakao.maps.event.addListener(map, 'zoom_changed', function() {
 		markerElem.style.height = newSize + 'px';
 	});
 
+// CCTV 마커를 화면 중앙 기준으로 범위 내에서만 표시
+function displayCCTVMarkers() {
+	var currentLevel = map.getLevel();
+	
+	// 기존 CCTV 마커 모두 제거
+	displayedCCTVOverlays.forEach(function(overlay) {
+		overlay.setMap(null);
+	});
+	displayedCCTVOverlays = [];
+	cctvMarkerElements = [];
+
+	// currentLevel <= 5일 때만 표시
+	if (currentLevel > 5 || cctvData.length === 0) {
+		return;
+	}
+
+	// 화면 중심 좌표 얻기
+	var center = map.getCenter();
+	var centerLat = center.getLat();
+	var centerLng = center.getLng();
+	
+	var latMin = centerLat - 0.2;
+	var latMax = centerLat + 0.2;
+	var lngMin = centerLng - 0.2;
+	var lngMax = centerLng + 0.2;
+
+	console.log('CCTV 마커 표시 범위: Lat(' + latMin.toFixed(4) + '~' + latMax.toFixed(4) + '), Lng(' + lngMin.toFixed(4) + '~' + lngMax.toFixed(4) + ')');
+
+	var displayedCount = 0;
+
+	// 범위 내의 CCTV만 마커로 표시
+	cctvData.forEach(function(cctv) {
+		if (cctv.lat >= latMin && cctv.lat <= latMax && 
+		    cctv.lng >= lngMin && cctv.lng <= lngMax) {
+			
+			var latlng = new kakao.maps.LatLng(cctv.lat, cctv.lng);
+
+			var markerContent = document.createElement('div');
+			markerContent.className = 'cctv-marker';
+			
+			// 현재 줌 레벨에 맞는 크기 적용
+			var newSize = 3;
+			if (currentLevel === 1) { newSize = 16; } 
+			else if (currentLevel === 2) { newSize = 14; } 
+			else if (currentLevel === 3) { newSize = 12; } 
+			else if (currentLevel === 4) { newSize = 11; } 
+			else if (currentLevel === 5) { newSize = 9; }
+			
+			markerContent.style.width = newSize + 'px';
+			markerContent.style.height = newSize + 'px';
+			cctvMarkerElements.push(markerContent);
+
+			var overlay = new kakao.maps.CustomOverlay({
+				position: latlng,
+				content: markerContent,
+				xAnchor: 0.5,
+				yAnchor: 0.5
+			});
+			overlay.setMap(map);
+			displayedCCTVOverlays.push(overlay);
+			displayedCount++;
+		}
+	});
+
+	console.log('표시된 CCTV 개수:', displayedCount);
+}
+
 var nameDisplay = (currentLevel <= 9) ? 'block' : 'none';
 
 schoolNameElements.forEach(function(nameElem) {
@@ -223,12 +276,21 @@ schoolNameElements.forEach(function(nameElem) {
 		if (!isPoiHidden) {
 			map.addOverlayMapTypeId(kakao.maps.MapTypeId.TERRAIN);
 			isPoiHidden = true;
+			displayCCTVMarkers();  // CCTV 마커 표시
+		} else {
+			displayCCTVMarkers();  // 줌 변경 시에도 범위 업데이트
 		}
 	} else {
 		if (isPoiHidden) {
 			map.removeOverlayMapTypeId(kakao.maps.MapTypeId.TERRAIN);
 			isPoiHidden = false;
 		}
+		// currentLevel > 5일 때는 CCTV 마커 제거
+		displayedCCTVOverlays.forEach(function(overlay) {
+			overlay.setMap(null);
+		});
+		displayedCCTVOverlays = [];
+		cctvMarkerElements = [];
 	}
 });
 /* ========================================================================= */
@@ -336,6 +398,13 @@ kakao.maps.event.addListener(map, 'dblclick', function(mouseEvent) {
 window.addEventListener('keydown', function(event) {
 	if (event.key === 'Escape' || event.keyCode === 27) {
 		clearCircleOverlays();
+	}
+});
+
+// 지도 드래그 완료 시 CCTV 마커 범위 업데이트
+kakao.maps.event.addListener(map, 'dragend', function() {
+	if (map.getLevel() <= 5) {
+		displayCCTVMarkers();
 	}
 });
 /* ========================================================================= */
