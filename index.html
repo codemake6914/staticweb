@@ -15,6 +15,7 @@ html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
 	color: #D32F2F; 
 	text-shadow: -1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff, 1px 1px 0 #ffffff; 
 	white-space: nowrap;
+	pointer-events: none;
 }
 
 /* 학교 마커 - 빨간색 원 */
@@ -25,6 +26,7 @@ html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
 	border: 2px solid #ffffff; 
 	border-radius: 50%; 
 	box-shadow: 0px 0px 4px rgba(0,0,0,0.4);
+	pointer-events: none;
 }
 
 /* 학교명 라벨 */
@@ -34,7 +36,8 @@ html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
 	color: #333333;
 	text-shadow: -1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff, 1px 1px 0 #ffffff;
 	white-space: nowrap;
-	display: none; 
+	display: none;
+	pointer-events: none;
 }
 
 /* CCTV 마커 - 녹색 사각형 */
@@ -45,6 +48,7 @@ html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
 	border: 1px solid #FFFFFF;
 	box-sizing: border-box;
 	box-shadow: 0px 0px 3px rgba(0,0,0,0.3);
+	pointer-events: none;
 }
 
 /* 거리 라벨 */
@@ -54,6 +58,18 @@ html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
 	color: #FF0000;
 	text-shadow: -1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff, 1px 1px 0 #ffffff;
 	white-space: nowrap;
+	pointer-events: none;
+}
+
+/* CCTV 텍스트 라벨 - 녹색 */
+.cctv-text-label {
+	font-size: 10px;
+	font-weight: bold;
+	color: #00CC00;
+	text-shadow: -1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff, 1px 1px 0 #ffffff;
+	white-space: nowrap;
+	display: block;
+	pointer-events: none;
 }
 </style>
 </head>
@@ -212,6 +228,21 @@ function displayCCTVMarkers() {
 			});
 			overlay.setMap(map);
 			displayedCCTVOverlays.push(overlay);
+
+			// CCTV 이름 라벨 추가
+			var nameElem = document.createElement('div');
+			nameElem.className = 'cctv-text-label';
+			nameElem.innerText = cctv.name;
+
+			var nameOverlay = new kakao.maps.CustomOverlay({
+				position: latlng,
+				content: nameElem,
+				xAnchor: 0.0,
+				yAnchor: 0.5
+			});
+			nameOverlay.setMap(map);
+			displayedCCTVOverlays.push(nameOverlay);
+
 			displayedCount++;
 		}
 	}
